@@ -8,7 +8,7 @@ openerp.web_m2x_options = function (instance) {
         _t  = instance.web._t,
         _lt = instance.web._lt;
 
-    instance.web.form.FieldMany2One.include({
+    instance.web.form.FieldMany2One = instance.web.form.FieldMany2One.extend({
 
         show_error_displayer: function () {
             if ((typeof this.options.m2o_dialog === 'undefined' && this.can_create) ||
@@ -18,7 +18,7 @@ openerp.web_m2x_options = function (instance) {
         },
 
         get_search_result: function (search_val) {
-
+            var Objects = new instance.web.Model(this.field.relation);
             var def = $.Deferred();
             var self = this;
             // add options limit used to change number of selections record
@@ -32,7 +32,11 @@ openerp.web_m2x_options = function (instance) {
             if(typeof this.options.search_more === 'boolean') {
                 this.search_more = this.options.search_more
             }
-
+            
+            // add options field_color and colors to color item(s) depending on field_color value
+            this.field_color = this.options.field_color
+            this.colors = this.options.colors
+            
             var dataset = new instance.web.DataSet(this, this.field.relation,
                                                    self.build_context());
             var blacklist = this.get_search_blacklist();
@@ -69,7 +73,30 @@ openerp.web_m2x_options = function (instance) {
                         id: x[0],
                     };
                 });
+                
+                // Search result value colors
 
+                if (self.colors && self.field_color) {
+                    var value_ids = [];
+                    for (var index in values) {
+                        value_ids.push(values[index].id);
+                    }
+                    
+                    // RPC request to get field_color from Objects
+                    Objects.query([self.field_color])
+                                .filter([['id', 'in', value_ids]])
+                                .all().done(function (objects) {
+                                    console.log(objects);
+                                    for (var index in objects) {
+                                        var value = values[index];
+                                        var color = self.colors[objects[index].state] || 'black';
+                                        value.label = '<span style="color:'+color+'">'+value.label+'</span>';
+                                    }
+                                    def.resolve(values);
+                                });
+                }
+
+                
                 // search more... if more results that max
 
                 if (values.length > self.limit || self.search_more) {
@@ -126,8 +153,11 @@ openerp.web_m2x_options = function (instance) {
                         classname: 'oe_m2o_dropdown_option'
                     });
                 }
-
-                def.resolve(values);
+                
+                // Check if colors specified to wait for RPC
+                if (!(self.field_color && self.colors)){
+                    def.resolve(values);
+                }
             });
 
             return def;
